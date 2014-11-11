@@ -8,7 +8,7 @@ var userDB = new UserDB();
 
 function log(type) {
     return function () {
-        console.log(type, arguments[0]);
+        DataBase.log(type, arguments[0]);
     }
 }
 
@@ -28,7 +28,7 @@ userDB.insert({ name: 'to be deleted' }, function () {
             userDB.getById(toBeDeleted.id, function (obj) {
 
                 if (obj.name != 'to be deleted2')
-                    console.log('Update Not Working');
+                    DataBase.log('Update Not Working');
 
                 log('ToBeDeleted')(toBeDeleted);
                 userDB.deleteById(toBeDeleted.id);
