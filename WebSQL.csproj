@@ -57,6 +57,8 @@
     <Reference Include="System.EnterpriseServices" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include=".gitattributes" />
+    <Content Include=".gitignore" />
     <Content Include="index.html" />
     <Content Include="js\app.js" />
     <Content Include="js\db.js" />
