@@ -13,7 +13,7 @@ function log(type) {
 }
 
 userDB.getAll(log('getAll'));
-userDB.query('SELECT * FROM User where Id == 1', log('query'));
+userDB.executeSql('SELECT * FROM User where Id == 1', log('query'));
 userDB.search('john', log('search'))
 
 
