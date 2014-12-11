@@ -4,35 +4,36 @@
 var _db = openDatabase('MyDB', '1.0', 'My DataBase', 10 * 1024 * 1024);
 
 DataBase.init(_db)
-var userDB = new UserDB();
 
-function log(type) {
+function log(type, p) {
     return function () {
         DataBase.log(type, arguments[0]);
+        return arguments[0];
     }
 }
 
-userDB.getAll(log('getAll'));
-userDB.executeSql('SELECT * FROM User where Id == 1', log('query'));
-userDB.search('john', log('search'))
+function insert(id, name, birthDate, gender, phone) {
+    return userDB.insert({ id: id, name: name, birthDate: birthDate, gender: gender, phone: phone });
+}
+
+function insertMany() {
+    var inserts = [];
+    for (var i = 0; i < 10 ; i++)
+        inserts.push(insert(10 + i, 'Name ' + i));
+
+    return Promise.all(inserts);
+}
+
+var userDB = new UserDB();
 
 
-userDB.insert({ name: 'to be deleted' }, function () {
-    userDB.getAll(function (result) {
+userDB.deleteAll()
+    .then(userDB.getAll).then(log('Empty'))
+    .then(userDB.insert({ id: 'teste', name: "John", birthDate: "2001-05-09", gender: "Male", phone: "555-1234" }))
+    .then(userDB.getAll).then(log('User John only:'))
+    .then(function () { return userDB.getById(1) }).then(function (john) { john.name = 'Not John'; return userDB.update(john); })
+    .then(userDB.getAll).then(log('Not User John only:'))
+    .then(insertMany)
+    .then(userDB.getAll)
+    .then(log('All:')).catch(log('Error'));
 
-        var toBeDeleted = result[result.length - 1];
-        toBeDeleted.name = 'to be deleted2';
-
-        userDB.update(toBeDeleted, function () {
-
-            userDB.getById(toBeDeleted.id, function (obj) {
-
-                if (obj.name != 'to be deleted2')
-                    DataBase.log('Update Not Working');
-
-                log('ToBeDeleted')(toBeDeleted);
-                userDB.deleteById(toBeDeleted.id);
-            });
-        });
-    });
-});

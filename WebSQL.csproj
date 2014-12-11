@@ -62,6 +62,7 @@
     <Content Include="index.html" />
     <Content Include="js\app.js" />
     <Content Include="js\db.js" />
+    <Content Include="js\PromiseEx.js" />
     <Content Include="js\userDB.js" />
   </ItemGroup>
   <PropertyGroup>

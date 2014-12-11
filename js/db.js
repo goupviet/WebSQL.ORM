@@ -1,106 +1,227 @@
-﻿function DataBase() {
+﻿
+(function (window, document, undefined) {
+    'use strict';
 
-    this._getTableName = function () {
-        return this.constructor.tableName;
-    }
-    this._getPrimaryKey = function () {
-        return this.constructor.primaryKey;
-    }
-    this._getTableSchema = function () {
-        return this.constructor.tableSchema;
-    }
+    var db;
+    var schemas = {};
+    var queries = {};
+    var isReady = false;
 
-    this.executeSqlSingle = function (command) {
-        //DataBase.log('executeSqlSingle', command);
-        var args = [];
-        var flag = false;
-        for (var i = 0; i < arguments.length; i++) {
-            if (!flag && arguments[i] && arguments[i].constructor == Function) {
-                flag = true;
-                var callback = arguments[i];
-                args[i] = function (list) { callback(list[0]); };
-            }
-            else
-                args[i] = arguments[i];
+    window.DataBase = function () {
+        var self = this;
+        var queries = {};
+        var isReady = false;
+        var schema;
+        this.executeSqlSingle = function (sql, parameters) {
+            return DataBase.executeSql(sql, parameters).then(function (rs) { if (rs) return rs[0]; });
         }
 
-        this.executeSql.apply(this, args);
-    }
+        this.executeSql = function (sql, parameters) {
+            return DataBase.executeSql(sql, parameters);
+        }
 
-    this.executeSql = function (command) {
-        //DataBase.log('executeSql', command);
-        DataBase.executeSql.apply(null, arguments);
-    }
-}
-
-DataBase.executeSqlBatch = function (commands, okCallback, errorCallback) {
-    commands = commands.filter(function (i) { return i && i.trim(); });
-
-    var execute = function (tx, idx) {
-        var cmd = commands[idx];
-        tx.executeSql(cmd, null
-            , function () {
-                DataBase.log('BatchExecuted', cmd);
-                if (idx == commands.length - 1) {
-                    if (okCallback)
-                        okCallback();
-                }
-                else
-                    execute(tx, ++idx);
-            }
-            , function (tx, err) {
-                DataBase.log('BatchError', cmd, arguments);
-                if (errorCallback)
-                    errorCallback(err, cmd);
+        this.getAll = function () {
+            return onReady().then(function () {
+                return DataBase.executeSql(queries.selectAll);
             });
+        }
+        this.getById = function (id) {
+            return onReady().then(function () {
+                return self.executeSqlSingle(queries.selectById, [id]);
+            });
+        }
+
+        this.deleteAll = function () {
+            return onReady().then(function () {
+                return DataBase.executeSql(queries.deleteAll);
+            });
+        }
+
+        this.deleteById = function (id) {
+            return onReady().then(function () {
+                return DataBase.executeSql(queries.deleteById, [id]);
+            });
+        }
+
+        this.insert = function (object) {
+            return onReady().then(function () {
+
+                var params = schema.columns.map(function (col) { return object[col.name] === undefined ? null : object[col.name]; });
+                return DataBase.executeSql(queries.insert, params);
+            });
+        }
+
+        this.update = function (object) {
+            return onReady().then(function () {
+
+                var params = schema.columns.filter(function (col) { return !col.isPrimaryKey }).concat(schema.columns.filter(function (col) { return col.isPrimaryKey }));
+                params = params.map(function (col) { return object[col.name] === undefined ? null : object[col.name]; });
+                return DataBase.executeSql(queries.update, params);
+            });
+        }
+
+
+        function setReady() {
+            isReady = true;
+            schema = schemas[self.constructor.tableName];
+            var columns = schema.columns.map(function (col) { return col.name; });
+
+            DataBase.log('Generating SQL for:', self.constructor.name);
+            queries.selectAll = 'SELECT * FROM ' + schema.tableName;
+            queries.selectById = 'SELECT * FROM ' + schema.tableName + ' WHERE ' + schema.primaryKey + ' = ?';
+            queries.deleteAll = 'DELETE FROM ' + schema.tableName;
+            queries.deleteById = 'DELETE FROM ' + schema.tableName + ' WHERE ' + schema.primaryKey + ' = ?';
+
+            var sql = "INSERT INTO " + schema.tableName + '(' + columns.join(', ') + ')';
+            sql += ' VALUES(' + columns.map(function () { return '?' }).join(', ') + ')';
+            queries.insert = sql;
+
+            var sql = "UPDATE " + schema.tableName + ' SET ' + columns.filter(function (col) { return col != schema.primaryKey }).join(' = ?, ') + ' = ? ';
+            sql += ' WHERE ' + schema.primaryKey + ' = ?';
+            queries.update = sql;
+        }
+
+        function onReady() {
+            var dbClass = self.constructor;
+            var timeout = 0;
+
+            if (dbClass.isReady)
+                return Promise.resolve();
+
+            return new Promise(function (resolve, reject) {
+
+                var interval = setInterval(function () {
+                    timeout += 50;
+
+                    if (dbClass.isReady) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                    else if (timeout > 4000) {
+                        clearInterval(interval);
+                        reject('Timeout');
+                    }
+                }, 50);
+            }).then(setReady);
+        }
     }
 
-    DataBase.db.transaction(function (tx) {
-        execute(tx, 0);
-    });
-}
+    DataBase.executeSqlBatch = function (commands, okCallback, errorCallback) {
+        commands = commands.filter(function (i) { return i && i.trim(); });
 
-DataBase.executeSql = function (command) {
-    if (!DataBase.isReady)
-        return DataBase.onReady(arguments);
+        if (!commands.length)
+            return;
 
-    var parameters, okCB, errorCB;
+        var execute = function (tx, idx) {
+            var cmd = commands[idx];
+            tx.executeSql(cmd, null
+                , function () {
+                    DataBase.log('BatchExecuted', cmd);
+                    if (idx == commands.length - 1) {
+                        if (okCallback)
+                            okCallback();
+                    }
+                    else
+                        execute(tx, ++idx);
+                }
+                , function (tx, err) {
+                    DataBase.log('BatchError', cmd, arguments);
+                    if (errorCallback)
+                        errorCallback(err, cmd);
+                });
+        }
 
-    if (arguments.length == 1) {
-        //no parameters
+        DataBase.db.transaction(function (tx) {
+            execute(tx, 0);
+        });
     }
-    if (arguments[1] != null && arguments[1].constructor == Function) {
-        okCB = arguments[1];
-        errorCB = arguments[2];
+
+    DataBase.executeSql = function (sql, parameters) {
+
+        return new Promise(function (resolve, reject) {
+            var fail = function (tx, err) { return reject(err) };
+
+            var exec = function () {
+                DataBase.log('Querying: ', sql, 'Parameters:', parameters || []);
+
+                db.transaction(function (tx) {
+                    tx.executeSql(sql, parameters, function (t, r) { resolve(r) }, fail);
+                }, fail);
+            }
+
+            if (!DataBase.isReady)
+                onReady().then(exec);
+            else
+                exec();
+        }).then(translate);
     }
-    else if (arguments[1] == null || arguments[1].constructor == Array) {
-        parameters = arguments[1];
-        okCB = arguments[2];
-        errorCB = arguments[3];
+
+    DataBase.setup = function (childClass, tableName, tableSchema) {
+        childClass.prototype = new DataBase;
+        childClass.prototype.constructor = childClass;
+        childClass.tableName = tableName;
+
+        if (!isReady)
+            return onReady().then(function () { DataBase.setup(childClass, tableName, tableSchema); });
+
+        log('Setting up:', childClass.name, tableName);
+        if (tableSchema && !schemas[tableName]) {
+            //CREATE TABLE
+            schemas[tableName] = tableSchema;
+            return createTable(tableSchema)
+                .then(function () { return DataBase.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" WHERE name = ?', [tableName]) })
+                .then(loadSchemas)
+                .then(function () { return setReady(childClass, tableName) });
+        }
+        else if (!schemas[tableName]) {
+            return DataBase.log('Table not found: ' + tableName);
+        }
+        else {
+            return setReady(childClass, tableName);
+        }
     }
-    else {
-        throw new Error('Parameters not supported.');
+
+    DataBase.init = function (dbObject) {
+        db = dbObject;
+        loadSchemas().then(function () {
+            isReady = true;
+            DataBase.log('DataBase is ready!');
+        });
     }
 
-    if (parameters)
-        DataBase.log('Querying: ', command, 'Parameters:', parameters);
-    else
-        DataBase.log('Querying: ', command);
+    function loadSchemas(tables) {
+        if (!tables) {
+            return new Promise(function (resolve, reject) {
+                db.transaction(function (tx) { tx.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table";', [], function (tx, rs) { return resolve(loadSchemas(translate(rs))); }, reject) });
 
-    DataBase.db.transaction(function (tx) {
-        tx.executeSql(command, parameters, DataBase.translateCallback(okCB), errorCB);
-    }, function (err) { DataBase.log('Error querying database', command, parameters || '') });
-}
+            });
+        }
 
-DataBase.log = function () {
-    console.log.apply(console, arguments);
-}
+        for (var i = 0; i < tables.length; i++) {
+            var table = tables[i];
 
-DataBase.translateCallback = function (callback) {
-    if (!callback)
-        return null;
+            var schema = {};
+            var columns = table.sql.replace(/^[^\(]+\(([^\)]+)\)/g, '$1').replace(/\`|\r|\n/g, '').split(',').map(function (i) { return i.trim() });
+            var cols = [];
+            var primaryKey;
+            for (var c = 0; c < columns.length; c++) {
+                var col = columns[c].trim();
+                var colValues = col.split(' ');
+                var name = colValues[0];
+                var type = colValues[1] || '';
 
-    return function (transaction, result) {
+                var isPrimaryKey = col.indexOf('primary key') >= 0;
+                if (isPrimaryKey) primaryKey = primaryKey || name;
+                cols.push({ name: name, type: type, isPrimaryKey: isPrimaryKey });
+            }
+
+            schemas[table.name] = { tableName: table.name, columns: cols, primaryKey: primaryKey };
+        }
+
+        return Promise.resolve(schemas);
+    }
+
+    function translate(result) {
         var ret = [];
         for (var i = 0; i < result.rows.length; i++) {
             var row = result.rows.item(i);
@@ -110,231 +231,49 @@ DataBase.translateCallback = function (callback) {
             ret.push(obj);
         }
 
-        callback(ret);
-    }
-}
-
-DataBase.prototype.onReady = function (callback) {
-    var self = this;
-
-    if (callback.callee) //Is Arguments
-    {
-        var args = callback;
-        callback = function () { args.callee.apply(self, args); };
+        return ret;
     }
 
+    function onReady() {
+        var timeout = 0;
 
-    if (self.constructor.isReady)
-        callback();
-    else
-        setTimeout(function () { self.onReady(callback); }, 1);
-}
+        return new Promise(function (resolve, reject) {
+            if (isReady)
+                return resolve();
+            var interval = setInterval(function () {
+                timeout += 50;
 
-DataBase.prototype.isReady = function () {
-    return !!this.constructor.isReady
-}
-
-DataBase.prototype.getAll = function (okCB, errorCB) {
-    if (!this.isReady())
-        return this.onReady(arguments);
-
-    if (!this._getTableName())
-        throw new Error('TableName not defined');
-
-    var sql = this.constructor._SELECTALL = (this.constructor._SELECTALL || 'SELECT * FROM ' + this._getTableName());
-    this.executeSql(sql, okCB, errorCB);
-}
-
-DataBase.prototype.getById = function (id, okCB, errorCB) {
-    if (!this.isReady())
-        return this.onReady(arguments);
-
-    okCB = okCB || function () { };
-    if (!this._getTableName()) throw new Error('TableName not defined');
-    if (!this._getPrimaryKey()) throw new Error('PrimaryKey not defined');
-
-    var sql = this.constructor._SELECTBYID = (this.constructor._SELECTBYID || 'SELECT * FROM ' + this._getTableName() + ' WHERE ' + this._getPrimaryKey() + ' = ?');
-    this.executeSql(sql, [id], function (rs) { okCB(rs[0]); }, errorCB);
-}
-
-DataBase.prototype.deleteAll = function (okCB, errorCB) {
-    if (!this.isReady())
-        return this.onReady(arguments);
-
-    if (!this._getTableName())
-        throw new Error('TableName not defined');
-
-    var sql = this.constructor._DELETEALL = (this.constructor._DELETEALL || 'DELETE FROM ' + this._getTableName());
-    this.executeSql(sql, okCB, errorCB);
-}
-
-DataBase.prototype.deleteById = function (id, okCB, errorCB) {
-    if (!this.isReady())
-        return this.onReady(arguments);
-
-    okCB = okCB || function () { };
-    if (!this._getTableName()) throw new Error('TableName not defined');
-    if (!this._getPrimaryKey()) throw new Error('PrimaryKey not defined');
-
-    var sql = this.constructor._DELETEBYID = (this.constructor._DELETEBYID || 'DELETE FROM ' + this._getTableName() + ' WHERE ' + this._getPrimaryKey() + ' = ?');
-    this.executeSql(sql, [id], okCB, errorCB);
-}
-
-
-DataBase.prototype.insert = function (object, okCB, errorCB) {
-    if (!this.isReady())
-        return this.onReady(arguments);
-
-    if (!this._getTableName()) throw new Error('TableName not defined');
-    if (!this._getPrimaryKey()) throw new Error('PrimaryKey not defined');
-    var tableSchema = this._getTableSchema();
-
-    var sql = this.constructor._INSERT;
-    if (!sql) {
-        var sql = "INSERT INTO " + this._getTableName() + '(';
-
-        var values = ' VALUES(';
-        for (var prop in tableSchema) {
-            if (prop == this._getPrimaryKey())
-                continue;
-
-            sql += prop + ', ';
-            values += '?, ';
-        }
-
-        sql = sql.substr(0, sql.length - 2);
-        sql += ')';
-        sql += values.substr(0, values.length - 2);
-        sql += ')';
-
-        this.constructor._INSERT = sql;
-    }
-
-    var parameters = [];
-    for (var prop in tableSchema)
-        if (prop != this._getPrimaryKey())
-            parameters.push(object[prop] === undefined ? null : object[prop]);
-
-    this.executeSql(sql, parameters, okCB, errorCB);
-}
-
-
-DataBase.prototype.update = function (object, okCB, errorCB) {
-    if (!this.isReady())
-        return this.onReady(arguments);
-
-    if (!this._getTableName()) throw new Error('TableName not defined');
-    if (!this._getPrimaryKey()) throw new Error('PrimaryKey not defined');
-    var tableSchema = this._getTableSchema();
-
-    var sql = this.constructor._UPDATE;
-    if (!sql) {
-        var sql = "UPDATE " + this._getTableName() + ' SET ';
-
-        var values = ' VALUES(';
-        for (var prop in tableSchema) {
-            if (prop == this._getPrimaryKey())
-                continue;
-
-            sql += prop + ' = ?, ';
-        }
-
-        sql = sql.substr(0, sql.length - 2);
-        sql += ' WHERE ' + this._getPrimaryKey() + ' = ?';
-        this.constructor._UPDATE = sql;
-    }
-
-    var parameters = [];
-    for (var prop in tableSchema)
-        if (prop != this._getPrimaryKey())
-            parameters.push(object[prop] === undefined ? null : object[prop]);
-
-    parameters.push(object[this._getPrimaryKey()]);
-    this.executeSql(sql, parameters, okCB, errorCB);
-}
-
-//CREATE TABLE IF NOT EXISTS Usuario (id integer primary key asc, nome text, idade integer)
-DataBase.setup = function (childClass, tableName, tableSchema) {
-    childClass.prototype = new DataBase;
-    childClass.prototype.constructor = childClass;
-    childClass.tableName = tableName;
-
-    if (!DataBase.isReady)
-        return DataBase.onReady(function () { DataBase.setup(childClass, tableName, tableSchema); });
-
-    if (!tableSchema) {
-        return DataBase.getTableSchema(tableName, function (schema) {
-            if (!schema)
-                return DataBase.log('Table not found: ' + tableName);
-
-            childClass.tableSchema = schema;
-            for (var prop in schema)
-                if (schema[prop].toLowerCase().indexOf('primary key') > 0)
-                    childClass.primaryKey = prop;
-            childClass.isReady = true;
+                if (isReady) {
+                    clearInterval(interval);
+                    resolve();
+                }
+                else if (timeout > 4000) {
+                    clearInterval(interval);
+                    reject('Timeout');
+                }
+            }, 50);
         });
     }
 
-    childClass.tableSchema = tableSchema;
+    function createTable(schema) {
+        var sql = 'CREATE TABLE IF NOT EXISTS ' + tableName + ' (';
 
-    var sql = 'CREATE TABLE IF NOT EXISTS ' + tableName + ' (';
+        for (var prop in tableSchema)
+            sql += prop + ' ' + tableSchema[prop] + ' , ';
 
-    for (var prop in tableSchema) {
-        sql += prop + ' ' + tableSchema[prop] + ' , ';
-        if (tableSchema[prop].toLowerCase().indexOf('primary key') > 0)
-            childClass.primaryKey = prop;
+        sql = sql.substr(0, sql.length - 2);
+        sql += ')';
+
+        return DataBase.executeSql(sql);
     }
 
-    sql = sql.substr(0, sql.length - 2);
-    sql += ')';
-
-    DataBase.log('CREATE TABLE: ', sql);
-    DataBase.db.transaction(function (tx) {
-        tx.executeSql(sql, [], null, function (err) { DataBase.log('Error creating table: ' + childClass.name, arguments) });
+    function setReady(childClass, tableName) {
         childClass.isReady = true;
-    });
-}
-
-DataBase.readyCallbacks = [];
-DataBase.init = function (db) {
-    DataBase.db = db;
-    DataBase.isReady = true;
-    for (var i = 0; i < DataBase.readyCallbacks.length; i++)
-        DataBase.readyCallbacks[i]();
-}
-
-DataBase.onReady = function (callback) {
-
-    if (callback.callee) //Is Arguments
-    {
-        var args = callback;
-        callback = function () { args.callee.apply(self, args); };
+        DataBase.log(childClass.name + ' is ready!');
+        return Promise.resolve(true);
     }
 
-
-    if (DataBase.isReady)
-        callback();
-
-    DataBase.readyCallbacks.push(callback);
-}
-
-DataBase.getTableSchema = function (tableName, callback) {
-    DataBase.db.transaction(function (tx) {
-        tx.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" AND name = ?;', [tableName], function (tx, results) {
-            if (!results.rows.length)
-                return callback(null);
-
-            var schema = {};
-            var columns = results.rows.item(0).sql.replace(/^[^\(]+\(([^\)]+)\)/g, '$1').replace(/\`|\r|\n/g, '').split(',').map(function (i) { return i.trim() });
-            for (var i = 0; i < columns.length; i++) {
-                var col = columns[i].trim();
-                var colValues = col.split(' ');
-                var name = colValues[0];
-                var type = colValues[1] || '';
-
-                schema[name] = type;
-            }
-            callback(schema);
-        });
-    });
-}
+    DataBase.log = function () {
+        console.log([].slice.call(arguments));
+    }
+})(window, document, undefined);
