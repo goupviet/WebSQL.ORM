@@ -26,7 +26,6 @@ function insertMany() {
 
 var userDB = new UserDB();
 
-
 userDB.deleteAll()
     .then(userDB.getAll).then(log('Empty'))
     .then(userDB.insert({ id: 1, name: "John", birthDate: "2001-05-09", gender: "Male", phone: "555-1234" }))

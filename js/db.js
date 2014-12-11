@@ -164,12 +164,12 @@
         if (!isReady)
             return onReady().then(function () { DataBase.setup(childClass, tableName, tableSchema); });
 
-        log('Setting up:', childClass.name, tableName);
+        DataBase.log('Setting up:', childClass.name, tableName);
         if (tableSchema && !schemas[tableName]) {
             //CREATE TABLE
             schemas[tableName] = tableSchema;
-            return createTable(tableSchema)
-                .then(function () { return DataBase.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" WHERE name = ?', [tableName]) })
+            return createTable(tableSchema, tableName)
+                .then(function () { return DataBase.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" AND name = ?', [tableName]) })
                 .then(loadSchemas)
                 .then(function () { return setReady(childClass, tableName) });
         }
@@ -255,7 +255,7 @@
         });
     }
 
-    function createTable(schema) {
+    function createTable(tableSchema, tableName) {
         var sql = 'CREATE TABLE IF NOT EXISTS ' + tableName + ' (';
 
         for (var prop in tableSchema)
