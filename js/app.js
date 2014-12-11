@@ -29,7 +29,7 @@ var userDB = new UserDB();
 
 userDB.deleteAll()
     .then(userDB.getAll).then(log('Empty'))
-    .then(userDB.insert({ id: 'teste', name: "John", birthDate: "2001-05-09", gender: "Male", phone: "555-1234" }))
+    .then(userDB.insert({ id: 1, name: "John", birthDate: "2001-05-09", gender: "Male", phone: "555-1234" }))
     .then(userDB.getAll).then(log('User John only:'))
     .then(function () { return userDB.getById(1) }).then(function (john) { john.name = 'Not John'; return userDB.update(john); })
     .then(userDB.getAll).then(log('Not User John only:'))
