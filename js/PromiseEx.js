@@ -1,4 +1,27 @@
-﻿Function.prototype.toPromisable = function () {
+﻿Promise.allProperties = function (obj) {
+    var result = {};
+    var arr = [];
+
+    for (var prop in obj) {
+        var value = obj[prop];
+        if (value.constructor != Promise)
+            continue;
+
+        p = prop;
+        var fn = function (r) {
+            result[arguments.callee.prop] = r;
+            console.log([arguments.callee.prop, result]);
+        };
+
+        fn.prop = prop;
+        console.log([prop, p]);
+        arr.push(value.then(fn).catch(fn));
+    }
+
+    return Promise.all(arr).then(function () { return result;});
+}
+
+Function.prototype.toPromisable = function () {
     var params = this.getParameters();
 
     if (params.indexOf('success') < 0 || params.indexOf('fail') < 0)

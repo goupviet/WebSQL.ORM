@@ -10,7 +10,7 @@
 
     <script type="text/javascript" src="js/db.js"></script>
     <script>
-        DataBase.log = function () {
+        DBHelper.log = function () {
             var json = '';
             for (var i = 0; i < arguments.length; i++)
                 json = json + JSON.stringify(arguments[i]) + ' ';
@@ -25,6 +25,7 @@
     </script>
     <script type="text/javascript" src="js/UserDB.js"></script>
     <script type="text/javascript" src="js/app.js"></script>
+    <script type="text/javascript" src="js/PromiseEx.js"></script>
 </body>
 
 

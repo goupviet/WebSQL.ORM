@@ -1,13 +1,13 @@
 ﻿///<reference path="db.js" />
 ///<reference path="userDB.js" />
 
-var _db = openDatabase('MyDB', '1.0', 'My DataBase', 10 * 1024 * 1024);
+var _db = openDatabase('MyDB', '1.0', 'My DBHelper', 10 * 1024 * 1024);
 
-DataBase.init(_db)
+DBHelper.init(_db)
 
 function log(type, p) {
     return function () {
-        DataBase.log(type, arguments[0]);
+        DBHelper.log(type, arguments[0]);
         return arguments[0];
     }
 }

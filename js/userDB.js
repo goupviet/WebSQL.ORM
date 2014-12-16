@@ -7,5 +7,5 @@ function UserDB() {
     }
 }
 
-DataBase.setup(UserDB, 'User', { id: 'integer primary key asc', name: 'text', birthDate: 'text', gender: 'text', phone: 'integer' });
-//DataBase.setup(UserDB, 'User'); //Table already exists
+DBHelper.setup(UserDB, 'User', { id: 'integer primary key asc', name: 'text', birthDate: 'text', gender: 'text', phone: 'integer' });
+//DBHelper.setup(UserDB, 'User'); //Table already exists

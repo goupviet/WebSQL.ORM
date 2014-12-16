@@ -7,22 +7,22 @@
     var queries = {};
     var isReady = false;
 
-    window.DataBase = function () {
+    window.DBHelper = function () {
         var self = this;
         var queries = {};
         var isReady = false;
         var schema;
         this.executeSqlSingle = function (sql, parameters) {
-            return DataBase.executeSql(sql, parameters).then(function (rs) { if (rs) return rs[0]; });
+            return DBHelper.executeSql(sql, parameters).then(function (rs) { if (rs) return rs[0]; });
         }
 
         this.executeSql = function (sql, parameters) {
-            return DataBase.executeSql(sql, parameters);
+            return DBHelper.executeSql(sql, parameters);
         }
 
         this.getAll = function () {
             return onReady().then(function () {
-                return DataBase.executeSql(queries.selectAll);
+                return DBHelper.executeSql(queries.selectAll);
             });
         }
         this.getById = function (id) {
@@ -33,13 +33,13 @@
 
         this.deleteAll = function () {
             return onReady().then(function () {
-                return DataBase.executeSql(queries.deleteAll);
+                return DBHelper.executeSql(queries.deleteAll);
             });
         }
 
         this.deleteById = function (id) {
             return onReady().then(function () {
-                return DataBase.executeSql(queries.deleteById, [id]);
+                return DBHelper.executeSql(queries.deleteById, [id]);
             });
         }
 
@@ -47,7 +47,7 @@
             return onReady().then(function () {
 
                 var params = schema.columns.map(function (col) { return object[col.name] === undefined ? null : object[col.name]; });
-                return DataBase.executeSql(queries.insert, params);
+                return DBHelper.executeSql(queries.insert, params);
             });
         }
 
@@ -56,7 +56,7 @@
 
                 var params = schema.columns.filter(function (col) { return !col.isPrimaryKey }).concat(schema.columns.filter(function (col) { return col.isPrimaryKey }));
                 params = params.map(function (col) { return object[col.name] === undefined ? null : object[col.name]; });
-                return DataBase.executeSql(queries.update, params);
+                return DBHelper.executeSql(queries.update, params);
             });
         }
 
@@ -66,7 +66,7 @@
             schema = schemas[self.constructor.tableName];
             var columns = schema.columns.map(function (col) { return col.name; });
 
-            DataBase.log('Generating SQL for:', self.constructor.name);
+            DBHelper.log('Generating SQL for:', self.constructor.name);
             queries.selectAll = 'SELECT * FROM ' + schema.tableName;
             queries.selectById = 'SELECT * FROM ' + schema.tableName + ' WHERE ' + schema.primaryKey + ' = ?';
             queries.deleteAll = 'DELETE FROM ' + schema.tableName;
@@ -106,7 +106,7 @@
         }
     }
 
-    DataBase.executeSqlBatch = function (commands, okCallback, errorCallback) {
+    DBHelper.executeSqlBatch = function (commands, okCallback, errorCallback) {
         commands = commands.filter(function (i) { return i && i.trim(); });
 
         if (!commands.length)
@@ -116,7 +116,7 @@
             var cmd = commands[idx];
             tx.executeSql(cmd, null
                 , function () {
-                    DataBase.log('BatchExecuted', cmd);
+                    DBHelper.log('BatchExecuted', cmd);
                     if (idx == commands.length - 1) {
                         if (okCallback)
                             okCallback();
@@ -125,67 +125,67 @@
                         execute(tx, ++idx);
                 }
                 , function (tx, err) {
-                    DataBase.log('BatchError', cmd, arguments);
+                    DBHelper.log('BatchError', cmd, arguments);
                     if (errorCallback)
                         errorCallback(err, cmd);
                 });
         }
 
-        DataBase.db.transaction(function (tx) {
+        DBHelper.db.transaction(function (tx) {
             execute(tx, 0);
         });
     }
 
-    DataBase.executeSql = function (sql, parameters) {
+    DBHelper.executeSql = function (sql, parameters) {
 
         return new Promise(function (resolve, reject) {
             var fail = function (tx, err) { return reject(err) };
 
             var exec = function () {
-                DataBase.log('Querying: ', sql, 'Parameters:', parameters || []);
+                DBHelper.log('Querying: ', sql, 'Parameters:', parameters || []);
 
                 db.transaction(function (tx) {
                     tx.executeSql(sql, parameters, function (t, r) { resolve(r) }, fail);
                 }, fail);
             }
 
-            if (!DataBase.isReady)
+            if (!DBHelper.isReady)
                 onReady().then(exec);
             else
                 exec();
         }).then(translate);
     }
 
-    DataBase.setup = function (childClass, tableName, tableSchema) {
-        childClass.prototype = new DataBase;
+    DBHelper.setup = function (childClass, tableName, tableSchema) {
+        childClass.prototype = new DBHelper;
         childClass.prototype.constructor = childClass;
         childClass.tableName = tableName;
 
         if (!isReady)
-            return onReady().then(function () { DataBase.setup(childClass, tableName, tableSchema); });
+            return onReady().then(function () { DBHelper.setup(childClass, tableName, tableSchema); });
 
-        DataBase.log('Setting up:', childClass.name, tableName);
+        DBHelper.log('Setting up:', childClass.name, tableName);
         if (tableSchema && !schemas[tableName]) {
             //CREATE TABLE
             schemas[tableName] = tableSchema;
             return createTable(tableSchema, tableName)
-                .then(function () { return DataBase.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" AND name = ?', [tableName]) })
+                .then(function () { return DBHelper.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" AND name = ?', [tableName]) })
                 .then(loadSchemas)
                 .then(function () { return setReady(childClass, tableName) });
         }
         else if (!schemas[tableName]) {
-            return DataBase.log('Table not found: ' + tableName);
+            return DBHelper.log('Table not found: ' + tableName);
         }
         else {
             return setReady(childClass, tableName);
         }
     }
 
-    DataBase.init = function (dbObject) {
+    DBHelper.init = function (dbObject) {
         db = dbObject;
         loadSchemas().then(function () {
             isReady = true;
-            DataBase.log('DataBase is ready!');
+            DBHelper.log('DBHelper is ready!');
         });
     }
 
@@ -264,16 +264,16 @@
         sql = sql.substr(0, sql.length - 2);
         sql += ')';
 
-        return DataBase.executeSql(sql);
+        return DBHelper.executeSql(sql);
     }
 
     function setReady(childClass, tableName) {
         childClass.isReady = true;
-        DataBase.log(childClass.name + ' is ready!');
+        DBHelper.log(childClass.name + ' is ready!');
         return Promise.resolve(true);
     }
 
-    DataBase.log = function () {
+    DBHelper.log = function () {
         console.log([].slice.call(arguments));
     }
 })(window, document, undefined);
