@@ -106,34 +106,14 @@
         }
     }
 
-    DBHelper.executeSqlBatch = function (commands, okCallback, errorCallback) {
+    DBHelper.executeSqlBatch = function (commands) {
         commands = commands.filter(function (i) { return i && i.trim(); });
 
-        if (!commands.length)
-            return;
+        var promises = [];
+        for (var i = 0; i < commands.length; i++)
+            promises.push(DBHelper.executeSql(commands[i]));
 
-        var execute = function (tx, idx) {
-            var cmd = commands[idx];
-            tx.executeSql(cmd, null
-                , function () {
-                    DBHelper.log('BatchExecuted', cmd);
-                    if (idx == commands.length - 1) {
-                        if (okCallback)
-                            okCallback();
-                    }
-                    else
-                        execute(tx, ++idx);
-                }
-                , function (tx, err) {
-                    DBHelper.log('BatchError', cmd, arguments);
-                    if (errorCallback)
-                        errorCallback(err, cmd);
-                });
-        }
-
-        DBHelper.db.transaction(function (tx) {
-            execute(tx, 0);
-        });
+        return Promise.all(promises);
     }
 
     DBHelper.executeSql = function (sql, parameters) {
@@ -274,6 +254,6 @@
     }
 
     DBHelper.log = function () {
-        console.log([].slice.call(arguments));
+        console.log.apply(console, arguments);
     }
 })(window, document, undefined);
