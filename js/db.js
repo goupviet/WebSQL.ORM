@@ -116,7 +116,38 @@
         return Promise.all(promises);
     }
 
+    DBHelper.executeSqlSingle = function (sql, parameters) {
+        return DBHelper.executeSql(sql, parameters).then(function (rs) { if (rs) return rs[0]; });
+    }
+
     DBHelper.executeSql = function (sql, parameters) {
+
+        if (sql.indexOf(';') >= 0 && sql.indexOf(';') < sql.length - 1) { //Multi statement query
+
+            var idx = 0;
+            var promise = null;
+            var queries = sql.split(';').filter(function (q) { return q.replace(/\s/g, ''); });
+            parameters.reverse();
+
+            var exec = function () {
+                var query = queries[idx];
+                var params = [];
+                var parameterCount = query.match(/\?/g).length;
+                for (var i = 0; i < parameterCount; i++)
+                    params.push(parameters.pop());
+                DBHelper.log('Executing Multi Statement SQL(' + idx + '): ' + query, 'Params Count: ' + parameterCount, params);
+                idx++;
+
+                return DBHelper.executeSql(query, params).then(function (v) {
+                    if (idx == queries.length)
+                        return v;
+
+                    return exec();
+                });
+            };
+
+            return exec();
+        }
 
         return new Promise(function (resolve, reject) {
             var fail = function (tx, err) { return reject(err) };
