@@ -132,7 +132,7 @@
             var exec = function () {
                 var query = queries[idx];
                 var params = [];
-                var parameterCount = query.match(/\?/g).length;
+                var parameterCount = (query.match(/\?/g) || []).length;
                 for (var i = 0; i < parameterCount; i++)
                     params.push(parameters.pop());
                 DBHelper.log('Executing Multi Statement SQL(' + idx + '): ' + query, 'Params Count: ' + parameterCount, params);
@@ -263,7 +263,7 @@
                     reject('Timeout');
                 }
             }, 50);
-        });
+        }); 
     }
 
     function createTable(tableSchema, tableName) {
