@@ -4,68 +4,69 @@
 
     var db;
     var schemas = {};
-    var queries = {};
-    var isReady = false;
+    var isEngineReady = false;
 
     window.DBHelper = function () {
-        var self = this;
-        var queries = {};
-        var isReady = false;
-        var schema;
-        this.executeSqlSingle = function (sql, parameters) {
-            return DBHelper.executeSql(sql, parameters).then(function (rs) { if (rs) return rs[0]; });
+        var self, config;
+
+        this.executeSqlSingle = function (sql, parameters, modelType) {
+            return DBHelper.executeSql(sql, parameters, modelType).then(function (rs) { if (rs) return rs[0]; });
         }
 
-        this.executeSql = function (sql, parameters) {
-            return DBHelper.executeSql(sql, parameters);
+        this.executeSql = function (sql, parameters, modelType) {
+            return DBHelper.executeSql(sql, parameters, modelType);
         }
 
         this.getAll = function () {
-            return onReady().then(function () {
-                return DBHelper.executeSql(queries.selectAll);
+            return this.onReady().then(function () {
+                return DBHelper.executeSql(config.queries.selectAll, self.constructor.dbConfig.modelType);
             });
         }
         this.getById = function (id) {
-            return onReady().then(function () {
-                return self.executeSqlSingle(queries.selectById, [id]);
+            return this.onReady().then(function () {
+                return self.executeSqlSingle(config.queries.selectById, [id], self.constructor.dbConfig.modelType);
             });
         }
 
         this.deleteAll = function () {
-            return onReady().then(function () {
-                return DBHelper.executeSql(queries.deleteAll);
+            return this.onReady().then(function () {
+                return DBHelper.executeSql(config.queries.deleteAll);
             });
         }
 
         this.deleteById = function (id) {
-            return onReady().then(function () {
-                return DBHelper.executeSql(queries.deleteById, [id]);
+            return this.onReady().then(function () {
+                return DBHelper.executeSql(config.queries.deleteById, [id]);
             });
         }
 
         this.insert = function (object) {
-            return onReady().then(function () {
+            return this.onReady().then(function () {
 
-                var params = schema.columns.map(function (col) { return object[col.name] === undefined ? null : object[col.name]; });
-                return DBHelper.executeSql(queries.insert, params);
+                var params = config.schema.columns.map(function (col) { return object[col.name] === undefined ? null : object[col.name]; });
+                return DBHelper.executeSql(config.queries.insert, params);
             });
         }
 
         this.update = function (object) {
-            return onReady().then(function () {
+            return this.onReady().then(function () {
 
-                var params = schema.columns.filter(function (col) { return !col.isPrimaryKey }).concat(schema.columns.filter(function (col) { return col.isPrimaryKey }));
+                var params = config.schema.columns.filter(function (col) { return !col.isPrimaryKey }).concat(config.schema.columns.filter(function (col) { return col.isPrimaryKey }));
                 params = params.map(function (col) { return object[col.name] === undefined ? null : object[col.name]; });
-                return DBHelper.executeSql(queries.update, params);
+                return DBHelper.executeSql(config.queries.update, params);
             });
         }
 
+        function setReady(dbClass) {
+            //console.log('setReady', dbClass.dbConfig);
 
-        function setReady() {
-            isReady = true;
-            schema = schemas[self.constructor.tableName];
+            config = dbClass.dbConfig;
+            var schema = config.schema;
+            if (dbClass.dbConfig.queries)
+                return;
+
+            var queries = dbClass.dbConfig.queries = {};
             var columns = schema.columns.map(function (col) { return col.name; });
-
             DBHelper.log('Generating SQL for:', self.constructor.name);
             queries.selectAll = 'SELECT * FROM ' + schema.tableName;
             queries.selectById = 'SELECT * FROM ' + schema.tableName + ' WHERE ' + schema.primaryKey + ' = ?';
@@ -81,20 +82,27 @@
             queries.update = sql;
         }
 
-        function onReady() {
-            var dbClass = self.constructor;
-            var timeout = 0;
+        this.onReady = function () {
+            //console.log('onready');
+            var dbClass = this.constructor;
+            self = this;
 
-            if (dbClass.isReady)
+            if (dbClass.setupCompleted) {
+                setReady(dbClass);
+                dbClass.isReady = true;
                 return Promise.resolve();
+            }
 
+            var timeout = 0;
             return new Promise(function (resolve, reject) {
 
                 var interval = setInterval(function () {
                     timeout += 50;
 
-                    if (dbClass.isReady) {
+                    if (dbClass.setupCompleted) {
                         clearInterval(interval);
+                        dbClass.isReady = true;
+                        setReady(dbClass);
                         resolve();
                     }
                     else if (timeout > 4000) {
@@ -102,7 +110,7 @@
                         reject('Timeout');
                     }
                 }, 50);
-            }).then(setReady);
+            });
         }
     }
 
@@ -116,11 +124,11 @@
         return Promise.all(promises);
     }
 
-    DBHelper.executeSqlSingle = function (sql, parameters) {
-        return DBHelper.executeSql(sql, parameters).then(function (rs) { if (rs) return rs[0]; });
+    DBHelper.executeSqlSingle = function (sql, parameters, dbClass) {
+        return DBHelper.executeSql(sql, parameters, dbClass).then(function (rs) { if (rs) return rs[0]; });
     }
 
-    DBHelper.executeSql = function (sql, parameters) {
+    DBHelper.executeSql = function (sql, parameters, modelType) {
 
         if (sql.indexOf(';') >= 0 && sql.indexOf(';') < sql.length - 1) { //Multi statement query
 
@@ -138,7 +146,7 @@
                 DBHelper.log('Executing Multi Statement SQL(' + idx + '): ' + query, 'Params Count: ' + parameterCount, params);
                 idx++;
 
-                return DBHelper.executeSql(query, params).then(function (v) {
+                return DBHelper.executeSql(query, params, modelType).then(function (v) {
                     if (idx == queries.length)
                         return v;
 
@@ -160,42 +168,56 @@
                 }, fail);
             }
 
-            if (!DBHelper.isReady)
-                onReady().then(exec);
+            if (!isEngineReady)
+                onEngineReady().then(exec);
             else
                 exec();
-        }).then(translate);
+        }).then(function (result) { return translate(result, modelType); });
     }
 
-    DBHelper.setup = function (childClass, tableName, tableSchema) {
+    DBHelper.setup = function (config) {
+        var childClass = config.childClass,
+            tableName = config.tableName,
+            tableSchema = config.tableSchema,
+            modelType = config.modelType;
+
         childClass.prototype = new DBHelper;
-        childClass.prototype.constructor = childClass;
-        childClass.tableName = tableName;
+        childClass.prototype.constructor = config.childClass;
+        childClass.dbConfig = config;
+        childClass.dbConfig.tableName = tableName;
+        childClass.dbConfig.modelType = modelType || Object;
 
-        if (!isReady)
-            return onReady().then(function () { DBHelper.setup(childClass, tableName, tableSchema); });
+        function setReady(childClass, tableName, schema) {
+            childClass.dbConfig.schema = schema;
+            childClass.setupCompleted = true;
+            DBHelper.log(childClass.name + ' is ready!');
+        }
 
-        DBHelper.log('Setting up:', childClass.name, tableName);
+        if (!isEngineReady)
+            return onEngineReady().then(function () { DBHelper.setup(config); });
+
+        DBHelper.log(childClass.name + ' is initializing...');
         if (tableSchema && !schemas[tableName]) {
             //CREATE TABLE
             schemas[tableName] = tableSchema;
             return createTable(tableSchema, tableName)
                 .then(function () { return DBHelper.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" AND name = ?', [tableName]) })
                 .then(loadSchemas)
-                .then(function () { return setReady(childClass, tableName) });
+                .then(function () { return setReady(childClass, tableName, schemas[tableName]) });
         }
         else if (!schemas[tableName]) {
-            return DBHelper.log('Table not found: ' + tableName);
+            DBHelper.log('Table not found: ' + tableName);
         }
         else {
-            return setReady(childClass, tableName);
+            setReady(childClass, tableName, schemas[tableName]);
         }
     }
 
     DBHelper.init = function (dbObject) {
+        DBHelper.log('DBHelper is initializing...');
         db = dbObject;
         loadSchemas().then(function () {
-            isReady = true;
+            isEngineReady = true;
             DBHelper.log('DBHelper is ready!');
         });
     }
@@ -232,11 +254,13 @@
         return Promise.resolve(schemas);
     }
 
-    function translate(result) {
+    function translate(result, modelType) {
+        var modelType = modelType || Object;
+
         var ret = [];
         for (var i = 0; i < result.rows.length; i++) {
             var row = result.rows.item(i);
-            var obj = {};
+            var obj = new modelType;
             for (var p in row)
                 obj[p] = row[p];
             ret.push(obj);
@@ -245,16 +269,17 @@
         return ret;
     }
 
-    function onReady() {
+    function onEngineReady() {
         var timeout = 0;
 
         return new Promise(function (resolve, reject) {
-            if (isReady)
+            if (isEngineReady)
                 return resolve();
+
             var interval = setInterval(function () {
                 timeout += 50;
 
-                if (isReady) {
+                if (isEngineReady) {
                     clearInterval(interval);
                     resolve();
                 }
@@ -276,12 +301,6 @@
         sql += ')';
 
         return DBHelper.executeSql(sql);
-    }
-
-    function setReady(childClass, tableName) {
-        childClass.isReady = true;
-        DBHelper.log(childClass.name + ' is ready!');
-        return Promise.resolve(true);
     }
 
     DBHelper.log = function () {

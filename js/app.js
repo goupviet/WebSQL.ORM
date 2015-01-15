@@ -6,9 +6,9 @@ var _db = openDatabase('MyDB', '1.0', 'My DBHelper', 10 * 1024 * 1024);
 DBHelper.init(_db)
 
 function log(type, p) {
-    return function () {
-        DBHelper.log(type, arguments[0]);
-        return arguments[0];
+    return function (value) {
+        DBHelper.log.apply(null, [type, value]);
+        return value;
     }
 }
 
@@ -27,12 +27,12 @@ function insertMany() {
 var userDB = new UserDB();
 
 userDB.deleteAll()
-    .then(userDB.getAll).then(log('Empty'))
-    .then(userDB.insert({ id: 1, name: "John", birthDate: "2001-05-09", gender: "Male", phone: "555-1234" }))
-    .then(userDB.getAll).then(log('User John only:'))
-    .then(function () { return userDB.getById(1) }).then(function (john) { john.name = 'Not John'; return userDB.update(john); })
-    .then(userDB.getAll).then(log('Not User John only:'))
+    .then(function () { return userDB.getAll() }).then(log('Empty'))
+    .then(function () { return userDB.insert({ id: 1, name: "Jonny", birthDate: "2001-05-09", gender: "Male", phone: "555-1234" }) })
+    .then(function () { return userDB.getAll() }).then(log('Jonny alone:'))
+    .then(function () { return userDB.getById(1) }).then(function (jonny) { jonny.name = 'Not Jonny'; return userDB.update(jonny); })
+    .then(function () { return userDB.getAll() }).then(log('Jonny not Jonny anymore:'))
     .then(insertMany)
-    .then(userDB.getAll)
-    .then(log('All:')).catch(log('Error'));
-
+    .then(function () { return userDB.getAll() })
+    .then(log('All:')).catch(log('Error'))
+    .then(function () { return userDB.getById(1) }).then(function (jonny) { jonny.yell() }).catch(log('Error'));//jonny is a User model
