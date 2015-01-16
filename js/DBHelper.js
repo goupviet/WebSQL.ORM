@@ -175,16 +175,16 @@
     }
 
     DBHelper.setup = function (config) {
-        var childClass = config.childClass,
+        var dbClass = config.dbClass,
             tableName = config.tableName,
             tableSchema = config.tableSchema,
             modelType = config.modelType;
 
-        childClass.prototype = new DBHelper;
-        childClass.prototype.constructor = config.childClass;
-        childClass.dbConfig = config;
-        childClass.dbConfig.tableName = tableName;
-        childClass.dbConfig.modelType = modelType || Object;
+        dbClass.prototype = new DBHelper;
+        dbClass.prototype.constructor = config.dbClass;
+        dbClass.dbConfig = config;
+        dbClass.dbConfig.tableName = tableName;
+        dbClass.dbConfig.modelType = modelType || Object;
 
         function setReady(childClass, tableName, schema) {
             childClass.dbConfig.schema = schema;
@@ -195,20 +195,20 @@
         if (!isEngineReady)
             return onEngineReady().then(function () { DBHelper.setup(config); });
 
-        DBHelper.log(childClass.name + ' is initializing...');
+        DBHelper.log(dbClass.name + ' is initializing...');
         if (tableSchema && !schemas[tableName]) {
             //CREATE TABLE
             schemas[tableName] = tableSchema;
             return createTable(tableSchema, tableName)
                 .then(function () { return DBHelper.executeSql('SELECT name, sql FROM sqlite_master WHERE type="table" AND name = ?', [tableName]) })
                 .then(loadSchemas)
-                .then(function () { return setReady(childClass, tableName, schemas[tableName]) });
+                .then(function () { return setReady(dbClass, tableName, schemas[tableName]) });
         }
         else if (!schemas[tableName]) {
             DBHelper.log('Table not found: ' + tableName);
         }
         else {
-            setReady(childClass, tableName, schemas[tableName]);
+            setReady(dbClass, tableName, schemas[tableName]);
         }
     }
 

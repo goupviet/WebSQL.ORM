@@ -13,6 +13,6 @@ function UserDB() {
 
 //schema is not used (and is optional) if table already exists.
 var schema = { id: 'integer primary key asc', name: 'text', birthDate: 'text', gender: 'text', phone: 'integer' };
-var cfg = { childClass: UserDB, tableName: 'User', schema: schema, modelType: User };
+var cfg = { dbClass: UserDB, tableName: 'User', schema: schema, modelType: User };
 DBHelper.setup(cfg);
 
