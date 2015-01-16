@@ -18,7 +18,7 @@
 
         this.getAll = function () {
             return this.onReady().then(function () {
-                return DBHelper.executeSql(config.queries.selectAll, self.constructor.dbConfig.modelType);
+                return DBHelper.executeSql(config.queries.selectAll, [], self.constructor.dbConfig.modelType);
             });
         }
         this.getById = function (id) {
