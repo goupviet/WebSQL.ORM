@@ -243,6 +243,16 @@
             });
         }
 
+        var constraints = ['primary', 'unique', 'check', 'foreign'];
+        var ignoreConstraints = function (col) {
+            col = col.toLowerCase();
+            for (var i = 0; i < constraints.length; i++)
+                if (col.indexOf(constraints[i]) == 0)
+                    return false;
+
+            return true;
+        }
+
         for (var i = 0; i < tables.length; i++) {
             var table = tables[i];
 
@@ -250,13 +260,12 @@
             _sql = _sql.substr(_sql.indexOf('(') + 1, _sql.lastIndexOf(')') - _sql.indexOf('(') - 1); // Extrai colunas
             _sql = _sql.replace(/\`|\r|\n/g, ''); //Limpa caracteres
 
-
             var schema = {};
-            var columns = _sql.split(',').map(function (i) { return i.trim() });
+            var columns = _sql.split(',').map(function (i) { return i.replace(/^\s+|\s+$/g, '');/*trim*/ }).filter(ignoreConstraints);
             var cols = [];
             var primaryKey;
             for (var c = 0; c < columns.length; c++) {
-                var col = columns[c].replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' '); //trim e remove espaços duplicados
+                var col = columns[c].replace(/\s+/g, ' '); //remove espaços duplicados
                 var colValues = col.split(' ');
                 var name = colValues[0];
                 var type = colValues[1] || '';
