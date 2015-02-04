@@ -160,10 +160,10 @@
             var fail = function (tx, err) { return reject(err) };
 
             var exec = function () {
-                DBHelper.log('Querying: ', sql, 'Parameters:', parameters || []);
-
                 db.transaction(function (tx) {
-                    tx.executeSql(sql, parameters, function (t, r) { resolve(r) }, fail);
+                    tx.executeSql(sql, parameters, function (t, r) {
+                        resolve(r)
+                    }, fail);
                 }, fail);
             }
 
@@ -171,10 +171,24 @@
                 onEngineReady().then(exec);
             else
                 exec();
-        }).then(function (result) { return translate(result, modelType); });
+        }).then(function (result) {
+            result = translate(result, modelType);
+            if (parameters && parameters.length)
+                DBHelper.log('Querying: ', sql, 'Parameters:', parameters || [], 'Result:', result);
+            else
+                DBHelper.log('Querying: ', sql, 'Result:', result);
+
+            return result;
+        }).catch(function (err) {
+            DBHelper.log('Error in Query:', sql, 'Error: ', err);
+        });
     }
 
     DBHelper.setup = function (config) {
+
+        if (arguments[0].constructor == Function)
+            config = { dbClass: arguments[0], tableName: arguments[1] };
+
         var dbClass = config.dbClass,
             tableName = config.tableName,
             tableSchema = config.tableSchema,
@@ -232,12 +246,17 @@
         for (var i = 0; i < tables.length; i++) {
             var table = tables[i];
 
+            var _sql = table.sql;
+            _sql = _sql.substr(_sql.indexOf('(') + 1, _sql.lastIndexOf(')') - _sql.indexOf('(') - 1); // Extrai colunas
+            _sql = _sql.replace(/\`|\r|\n/g, ''); //Limpa caracteres
+
+
             var schema = {};
-            var columns = table.sql.replace(/^[^\(]+\(([^\)]+)\)/g, '$1').replace(/\`|\r|\n/g, '').split(',').map(function (i) { return i.trim() });
+            var columns = _sql.split(',').map(function (i) { return i.trim() });
             var cols = [];
             var primaryKey;
             for (var c = 0; c < columns.length; c++) {
-                var col = columns[c].trim();
+                var col = columns[c].replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' '); //trim e remove espaços duplicados
                 var colValues = col.split(' ');
                 var name = colValues[0];
                 var type = colValues[1] || '';
@@ -287,7 +306,7 @@
                     reject('Timeout');
                 }
             }, 50);
-        }); 
+        });
     }
 
     function createTable(tableSchema, tableName) {
