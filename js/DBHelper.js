@@ -288,17 +288,17 @@
             var cols = [];
             var primaryKey;
             for (var c = 0; c < columns.length; c++) {
-                var col = columns[c].replace(/\s+/g, ' '); //remove espaços duplicados
+                var col = columns[c].replace(/\s+/g, ' ').toLowerCase(); //remove espaços duplicados
                 var colValues = col.split(' ');
                 var name = colValues[0].replace(/\[|\]/g, '');
                 var type = colValues[1] || '';
 
                 var isPrimaryKey = col.indexOf('primary key') >= 0;
-                if (isPrimaryKey) primaryKey = primaryKey || name;
+                if (isPrimaryKey) primaryKey = name;
                 cols.push({ name: name, type: type, isPrimaryKey: isPrimaryKey });
             }
 
-            schemas[table.name] = { tableName: table.name, columns: cols, primaryKey: primaryKey };
+            schemas[table.name] = { tableName: table.name, columns: cols, primaryKey: primaryKey, sql: table.sql };
         }
 
         return Promise.resolve(schemas);
