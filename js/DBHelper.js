@@ -186,7 +186,7 @@
             $result.$isReady = true;
             return $result;
         }).catch(function (err) {
-            DBHelper.log('Error in Query:', sql, 'Error: ', err);
+            DBHelper.log('Error in Query:', sql, 'Parameters:', parameters || [], 'Error: ', err);
         });
         promise.$result = $result;
         return promise;
@@ -290,7 +290,7 @@
             for (var c = 0; c < columns.length; c++) {
                 var col = columns[c].replace(/\s+/g, ' '); //remove espaços duplicados
                 var colValues = col.split(' ');
-                var name = colValues[0];
+                var name = colValues[0].replace(/\[|\]/g, '');
                 var type = colValues[1] || '';
 
                 var isPrimaryKey = col.indexOf('primary key') >= 0;
