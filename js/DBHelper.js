@@ -17,9 +17,13 @@
         }
 
         this.getAll = function () {
-            return this.onReady().then(function () {
-                return DBHelper.executeSql(config.queries.selectAll, [], self.constructor.dbConfig.modelType);
+            var $result = [];
+            var promise = this.onReady().then(function () {
+                return DBHelper.executeSql(config.queries.selectAll, [], self.constructor.dbConfig.modelType, $result);
             });
+            promise.$result = $result;
+
+            return promise;
         }
         this.getById = function (id) {
             return this.onReady().then(function () {
@@ -127,7 +131,8 @@
         return DBHelper.executeSql(sql, parameters, dbClass).then(function (rs) { if (rs) return rs[0]; });
     }
 
-    DBHelper.executeSql = function (sql, parameters, modelType) {
+    DBHelper.executeSql = function (sql, parameters, modelType, $result) {
+        $result = $result || [];
 
         if (sql.indexOf(';') >= 0 && sql.indexOf(';') < sql.length - 1) { //Multi statement query
 
@@ -142,7 +147,7 @@
                 var parameterCount = (query.match(/\?/g) || []).length;
                 for (var i = 0; i < parameterCount; i++)
                     params.push(parameters.pop());
-                DBHelper.log('Executing Multi Statement SQL(' + idx + '): ' + query, 'Params Count: ' + parameterCount, params);
+                DBHelper.log('Executing Multi Statement SQL(' + idx + '): ', query, 'Params (' + parameterCount + ')', params);
                 idx++;
 
                 return DBHelper.executeSql(query, params, modelType).then(function (v) {
@@ -156,7 +161,7 @@
             return exec();
         }
 
-        return new Promise(function (resolve, reject) {
+        var promise = new Promise(function (resolve, reject) {
             var fail = function (tx, err) { return reject(err) };
 
             var exec = function () {
@@ -172,16 +177,34 @@
             else
                 exec();
         }).then(function (result) {
-            result = translate(result, modelType);
+            translate(result, modelType, $result);
             if (parameters && parameters.length)
-                DBHelper.log('Querying: ', sql, 'Parameters:', parameters || [], 'Result:', result);
+                DBHelper.log('Querying: ', sql, 'Parameters:', parameters || [], 'Result:', $result);
             else
-                DBHelper.log('Querying: ', sql, 'Result:', result);
+                DBHelper.log('Querying: ', sql, 'Result:', $result);
 
-            return result;
+            $result.$isReady = true;
+            return $result;
         }).catch(function (err) {
             DBHelper.log('Error in Query:', sql, 'Error: ', err);
         });
+        promise.$result = $result;
+        return promise;
+    }
+
+    function translate(result, modelType, ret) {
+        var modelType = modelType || Object;
+
+        var ret = ret || [];
+        for (var i = 0; i < result.rows.length; i++) {
+            var row = result.rows.item(i);
+            var obj = new modelType;
+            for (var p in row)
+                obj[p] = row[p];
+            ret.push(obj);
+        }
+
+        return ret;
     }
 
     DBHelper.setup = function (config) {
@@ -279,21 +302,6 @@
         }
 
         return Promise.resolve(schemas);
-    }
-
-    function translate(result, modelType) {
-        var modelType = modelType || Object;
-
-        var ret = [];
-        for (var i = 0; i < result.rows.length; i++) {
-            var row = result.rows.item(i);
-            var obj = new modelType;
-            for (var p in row)
-                obj[p] = row[p];
-            ret.push(obj);
-        }
-
-        return ret;
     }
 
     function onEngineReady() {
