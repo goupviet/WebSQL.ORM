@@ -8,12 +8,35 @@
     window.DBHelper = function () {
         var self, config;
 
-        this.executeSqlSingle = function (sql, parameters, modelType) {
-            return DBHelper.executeSql(sql, parameters, modelType).then(function (rs) { if (rs) return rs[0]; });
+        this.executeSqlSingle = function (sql, parameters) {
+
+            var $result = {};
+            var promise = this.onReady().then(function () {
+                return DBHelper.executeSql(sql, parameters, self.constructor.dbConfig.modelType)
+                            .then(function (rs) {
+                                if (rs.length) {
+                                    $result.value = new self.constructor.dbConfig.modelType;
+                                    for (var p in rs[0])
+                                        $result.value[p] = rs[0][p];
+                                }
+
+                                $result.$isReady = true;
+                                return $result.value;
+                            });
+            });
+            promise.$result = $result;
+
+            return promise;
         }
 
-        this.executeSql = function (sql, parameters, modelType) {
-            return DBHelper.executeSql(sql, parameters, modelType);
+        this.executeSql = function (sql, parameters) {
+            var $result = [];
+            var promise = this.onReady().then(function () {
+                return DBHelper.executeSql(sql, parameters, self.constructor.dbConfig.modelType, $result);
+            });
+            promise.$result = $result;
+
+            return promise;
         }
 
         this.getAll = function () {
@@ -61,8 +84,6 @@
         }
 
         function setReady(dbClass) {
-            //console.log('setReady', dbClass.dbConfig);
-
             config = dbClass.dbConfig;
             var schema = config.schema;
             if (dbClass.dbConfig.queries)
@@ -86,7 +107,6 @@
         }
 
         this.onReady = function () {
-            //console.log('onready');
             var dbClass = this.constructor;
             self = this;
 
@@ -133,6 +153,7 @@
 
     DBHelper.executeSql = function (sql, parameters, modelType, $result) {
         $result = $result || [];
+        parameters = parameters || [];
 
         if (sql.indexOf(';') >= 0 && sql.indexOf(';') < sql.length - 1) { //Multi statement query
 
@@ -150,9 +171,12 @@
                 DBHelper.log('Executing Multi Statement SQL(' + idx + '): ', query, 'Params (' + parameterCount + ')', params);
                 idx++;
 
-                return DBHelper.executeSql(query, params, modelType).then(function (v) {
-                    if (idx == queries.length)
-                        return v;
+                return DBHelper.executeSql(query, params, modelType).then(function (value) {
+                    $result.push(value);
+                    if (idx == queries.length) {
+                        $result.isReady = true;
+                        return $result;
+                    }
 
                     return exec();
                 });
@@ -184,12 +208,21 @@
                 DBHelper.log('Querying: ', sql, 'Result:', $result);
 
             $result.$isReady = true;
+
+            for (var i = 0; i < onExecuteSqlCallbacks.length; i++)
+                onExecuteSqlCallbacks[i]($result);
+
             return $result;
         }).catch(function (err) {
             DBHelper.log('Error in Query:', sql, 'Parameters:', parameters || [], 'Error: ', err);
         });
         promise.$result = $result;
         return promise;
+    }
+
+    var onExecuteSqlCallbacks = [];
+    DBHelper.onExecuteSql = function (callback) {
+        onExecuteSqlCallbacks.push(callback);
     }
 
     function translate(result, modelType, ret) {
@@ -284,9 +317,14 @@
             _sql = _sql.replace(/\`|\r|\n/g, ''); //Limpa caracteres
 
             var schema = {};
-            var columns = _sql.split(',').map(function (i) { return i.replace(/^\s+|\s+$/g, '');/*trim*/ }).filter(ignoreConstraints);
+            var columns = _sql.split(',').map(function (i) { return i.replace(/^\s+|\s+$/g, '');/*trim*/ });
+            var primaryKey = columns.map(function (line) { var arr = line.replace(/\s+/g, '').match(/^primarykey\(\[?(\w+)\]?\)/i); if (arr) return arr[arr.length - 1]; })
+                                    .filter(function (v) { return v; });
+
+            console.log(columns, primaryKey);
+            columns = columns.filter(ignoreConstraints);
             var cols = [];
-            var primaryKey;
+
             for (var c = 0; c < columns.length; c++) {
                 var col = columns[c].replace(/\s+/g, ' ').toLowerCase(); //remove espaços duplicados
                 var colValues = col.split(' ');
