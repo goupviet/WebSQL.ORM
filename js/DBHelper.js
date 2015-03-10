@@ -331,7 +331,7 @@
                 var name = colValues[0].replace(/\[|\]/g, '');
                 var type = colValues[1] || '';
 
-                var isPrimaryKey = col.indexOf('primary key') >= 0;
+                var isPrimaryKey = col.indexOf('primary key') >= 0 || name == primaryKey;
                 if (isPrimaryKey) primaryKey = name;
                 cols.push({ name: name, type: type, isPrimaryKey: isPrimaryKey });
             }
