@@ -150,6 +150,8 @@
         $result = $result || [];
         parameters = parameters || [];
 
+        sql = sql.replace(/^\s+|\s+$/g, ''); //trim
+
         if (sql.indexOf(';') >= 0 && sql.indexOf(';') < sql.length - 1) { //Multi statement query
 
             var idx = 0;
