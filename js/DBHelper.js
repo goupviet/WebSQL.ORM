@@ -14,12 +14,7 @@
             var promise = this.onReady().then(function () {
                 return DBHelper.executeSql(sql, parameters, self.constructor.dbConfig.modelType)
                             .then(function (rs) {
-                                if (rs.length) {
-                                    $result.value = new self.constructor.dbConfig.modelType;
-                                    for (var p in rs[0])
-                                        $result.value[p] = rs[0][p];
-                                }
-
+                                $result.value = rs[0];
                                 $result.$isReady = true;
                                 return $result.value;
                             });
@@ -147,8 +142,8 @@
         return Promise.all(promises);
     }
 
-    DBHelper.executeSqlSingle = function (sql, parameters, dbClass) {
-        return DBHelper.executeSql(sql, parameters, dbClass).then(function (rs) { if (rs) return rs[0]; });
+    DBHelper.executeSqlSingle = function (sql, parameters, modelType) {
+        return DBHelper.executeSql(sql, parameters, modelType).then(function (rs) { if (rs) return rs[0]; });
     }
 
     DBHelper.executeSql = function (sql, parameters, modelType, $result) {
@@ -321,7 +316,7 @@
             var primaryKey = columns.map(function (line) { var arr = line.replace(/\s+/g, '').match(/^primarykey\(\[?(\w+)\]?\)/i); if (arr) return arr[arr.length - 1]; })
                                     .filter(function (v) { return v; });
 
-            console.log(columns, primaryKey);
+            //console.log(columns, primaryKey);
             columns = columns.filter(ignoreConstraints);
             var cols = [];
 
