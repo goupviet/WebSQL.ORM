@@ -373,7 +373,10 @@
         return DBHelper.executeSql(sql);
     }
 
-    DBHelper.log = function () {
+    DBHelper.log = function (p) {
+        if (console.table && p && p.constructor == Array)
+            return console.table(p);
+
         console.log.apply(console, arguments);
     }
 })(window, document, undefined);
